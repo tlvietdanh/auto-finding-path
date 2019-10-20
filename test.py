@@ -50,7 +50,7 @@ class vertices:
     def __eq__(self, obj):
         return self.x == obj.x and self.y == obj.y
     def __lt__(self, other):
-        return self.dist < other.dist
+        return self.dist <= other.dist
 
 # Read input file
 def ReadFile(fileName):
@@ -302,12 +302,13 @@ def dijktra(s, f, graph, mCol, mRow):
         vertex = pq.get()
         u = vertex.callPoint(mCol)
         w = vertex.dist
-        for x, y in reversed(graph[u].listAdjacency):
+        for x, y in (graph[u].listAdjacency):
             point = y * mCol + x
-            if w + graph[point].dist <= dist[point] and graph[point].type <= END and graph[point].type >= EMPTYPOINT:
+            if w + graph[point].dist < dist[point] and graph[point].type <= END and graph[point].type >= EMPTYPOINT:
                 dist[point] = w + graph[point].dist
-                pq.put(graph[point])
-                graph[point].dist = dist[point]
+                v = vertices(x, y, 0)
+                v.dist = dist[point]
+                pq.put(v)
                 path[point] = u
     resultArr = []
     print(dist[f.callPoint(mCol)])
