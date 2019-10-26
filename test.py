@@ -23,7 +23,7 @@ EMPTYPOINT = 0
 COLOR = [['deep sky blue', 'sky blue'], ['steel blue', 'light steel blue'], ['gold4', 'gold2'],
 ['sea green', 'dark sea green'], ['dark orange', 'orange'], ['orange red', 'tomato'],
 ['hot pink', 'light pink'], ['dark violet', 'purple'], ['chocolate3', 'chocolate1']]
-TIME_PER_UNIT = 1
+TIME_PER_UNIT = 0.1
 SEARCH_DELAY_TIME = TIME_PER_UNIT / 1000
 
 class vertices:
@@ -140,28 +140,34 @@ def initGraph(mRow, mCol, listPolygons, startPoint, endPoint, listCatchPoint):
 
 # Initial widgets
 def createWidgets(root, mCol, mRow):
-    width = mCol * DISTANCE + 110
-    height = mRow * DISTANCE + 110
-    if width > root.winfo_screenwidth() - 80:
-        width = root.winfo_screenwidth()- 80
-    if height > root.winfo_screenheight()- 80:
-        height = root.winfo_screenheight()- 80
+    width = mCol * DISTANCE + 200
+    height = mRow * DISTANCE + 200
+    if width > root.winfo_screenwidth():
+        width = root.winfo_screenwidth()
+    if height > root.winfo_screenheight():
+        height = root.winfo_screenheight()
     
-    frame =Frame(root, width=width, height=height)
-    frame.grid(row=0,column=0)
+    frame =Frame(root, relief=SUNKEN)
+    frame.grid_rowconfigure(0, weight=1)
+    frame.grid_columnconfigure(0, weight=1)
     # Create canvas containing cell
-    c = Canvas(frame, width=width, height=height, bg="white")
     # Create horizontal scroll bar
     hbar=Scrollbar(frame,orient=HORIZONTAL)
-    hbar.pack(side=BOTTOM,fill=X)
-    hbar.config(command=c.xview)
+    hbar.grid(row=1, column=0, sticky=E+W)
+
     # Create vertical scroll bar
     vbar=Scrollbar(frame,orient=VERTICAL)
-    vbar.pack(side=RIGHT,fill=Y)
+    vbar.grid(row=0, column=1, sticky=N + S)
+    
+    # Draw map here
+    # draw_board(c, graph, mCol, mRow)
+    c = Canvas(frame, width=width, height=height, bg="white", scrollregion=(0, 0, mCol * DISTANCE + 100, mRow * DISTANCE + 100), xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+    c.grid(row=0, column=0, sticky=N+S+E+W)
+
+    hbar.config(command=c.xview)
     vbar.config(command=c.yview)
-    # Pack c into root
-    c.config(scrollregion=c.bbox("all"), xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-    c.pack(padx=1, pady=1)
+
+    frame.pack()
     return c
 
 # Initial interface 
@@ -273,6 +279,7 @@ def isInsidePolygon(listEdge, graph, polygon, mCol, mRow):
         if count % 2 == 1:
             vertice.type = INSIDE_POLYGON
 
+# Check if the point 
 def checker(listEgde, point):
     for i in listEgde:
         if point in i:
@@ -336,11 +343,11 @@ def BFS(s, f, graph, col, row, c):
     visited[s.callPoint(col)] = True
     q.put(s.callPoint(col))
     while not q.empty():
-        u = q.get()
-       
+        u = q.get()       
         # cứ mỗi lần lấy đỉnh kề ra, chúng ta sẽ cho các đa giác di chuyển và vẽ lại bản đồ
         for x, y in graph[u].listAdjacency:
             point = y * col + x
+            
             if graph[point].type <= END and graph[point].type >= EMPTYPOINT:
                 if not visited[point]:
                     if graph[point].type == EMPTYPOINT:
@@ -524,12 +531,12 @@ def createRoad(choose, graph, listCatchPoint, startPoint, endPoint, mCol, mRow, 
         visited = [False for q in range(listCatchPoint.__len__() + 1)]
         start = startPoint
         
-        while i <= listCatchPoint.__len__():
+        while i <= listCatchPoint.__len__() + 1:
             index = getMinDistance(listCatchPoint, start, visited, mCol, mRow)
             end = endPoint
             if i < listCatchPoint.__len__() or index != -1:
                 end = listCatchPoint[index]
-            countDis += FindPathWhilePlygonMove(startPoint, endPoint, graph, listPolygon, mCol, mRow, c, listEdge, choose)
+            countDis += FindPathWhilePlygonMove(start, end, graph, listPolygon, mCol, mRow, c, listEdge, choose)
             i += 1
             visited[index] = True
             start = end
