@@ -5,11 +5,13 @@ import math
 import argparse
 import os.path
 from os import path
+import time
+import random
 
 # Declare constant variables
 INF = int(1e9)
 PI = 3.14159265359
-BORDER = -2
+BORDER = -INF
 WALL_BORDER = -4
 INSIDE_POLYGON = -0.5
 START = 1
@@ -21,6 +23,8 @@ EMPTYPOINT = 0
 COLOR = [['deep sky blue', 'sky blue'], ['steel blue', 'light steel blue'], ['gold4', 'gold2'],
 ['sea green', 'dark sea green'], ['dark orange', 'orange'], ['orange red', 'tomato'],
 ['hot pink', 'light pink'], ['dark violet', 'purple'], ['chocolate3', 'chocolate1']]
+TIME_PER_UNIT = 1
+SEARCH_DELAY_TIME = TIME_PER_UNIT / 1000
 
 class vertices:
     def __init__(self, x, y, type):
@@ -29,6 +33,7 @@ class vertices:
         self.type = type
         self.listAdjacency = []
         self.dist = 1
+        self.widget = -1
 
     def addMovableCell(self, mCol, mRow):
         dirVertices = [
@@ -45,7 +50,7 @@ class vertices:
             self.listAdjacency.append([self.x + xdir, self.y + ydir])
     
     def callPoint(self, mCol):
-        return self.y * mCol + self.x
+        return self.y * (mCol) + self.x
         
     def __eq__(self, obj):
         return self.x == obj.x and self.y == obj.y
@@ -104,7 +109,7 @@ def initGraph(mRow, mCol, listPolygons, startPoint, endPoint, listCatchPoint):
             v = vertices(x, y, EMPTYPOINT)
             # Check border
             if x < 1 or y < 1 or x == mCol or y == mRow:
-                v.type = (BORDER)
+                v.type = BORDER
             else:
                 # Check if vertex is catch point
                 for catch in listCatchPoint:
@@ -124,7 +129,7 @@ def initGraph(mRow, mCol, listPolygons, startPoint, endPoint, listCatchPoint):
                 # adding all moveable vertices to the vertex
                 v.addMovableCell(mCol, mRow)
             graph.append(v)
-    
+
     for i in range(mCol + 1):
         v = vertices(i, mRow, BORDER)
         graph.append(v)
@@ -132,6 +137,71 @@ def initGraph(mRow, mCol, listPolygons, startPoint, endPoint, listCatchPoint):
         v = vertices(mCol, i, BORDER)
         graph.append(v)
     return graph
+
+# Initial widgets
+def createWidgets(root, mCol, mRow):
+    width = mCol * DISTANCE + 110
+    height = mRow * DISTANCE + 110
+    if width > root.winfo_screenwidth() - 80:
+        width = root.winfo_screenwidth()- 80
+    if height > root.winfo_screenheight()- 80:
+        height = root.winfo_screenheight()- 80
+    
+    frame =Frame(root, width=width, height=height)
+    frame.grid(row=0,column=0)
+    # Create canvas containing cell
+    c = Canvas(frame, width=width, height=height, bg="white")
+    # Create horizontal scroll bar
+    hbar=Scrollbar(frame,orient=HORIZONTAL)
+    hbar.pack(side=BOTTOM,fill=X)
+    hbar.config(command=c.xview)
+    # Create vertical scroll bar
+    vbar=Scrollbar(frame,orient=VERTICAL)
+    vbar.pack(side=RIGHT,fill=Y)
+    vbar.config(command=c.yview)
+    # Pack c into root
+    c.config(scrollregion=c.bbox("all"), xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+    c.pack(padx=1, pady=1)
+    return c
+
+# Initial interface 
+def initInterface(graph, canvas, col, row):
+    for i in range(-1, col):
+        if i < col:
+            canvas.create_text((i + 1) * DISTANCE + DISTANCE * 1.5, DISTANCE / 2, text=i + 1)
+    for j in range(-1, row):
+        canvas.create_text(DISTANCE / 2, (j + 1) * DISTANCE + DISTANCE * 1.5, text=j + 1)
+    i = 0
+    for v in graph:
+        coords = ((v.x + 1) * DISTANCE, (v.y + 1) * DISTANCE, (v.x + 1) * DISTANCE + DISTANCE, (v.y + 1) * DISTANCE + DISTANCE)
+        widget = canvas.create_rectangle(coords, width=1, state='disabled')
+        graph[i].widget = widget
+        i += 1
+
+# Draw map by tkinter
+def draw_board(c, graph, mCol, mRow):
+    for v in graph:
+        widget = v.widget
+        if v.type == EMPTYPOINT:
+            continue
+        elif (v.type == BORDER):
+            c.itemconfig(widget, fill='gray')
+        elif v.type == START:
+            c.itemconfig(widget, fill='red')
+        elif v.type == END:
+            c.itemconfig(widget, fill='blue')
+        elif v.type == CATCH:
+            c.itemconfig(widget, fill='SteelBlue3')    
+        elif (v.type >= END + 1):
+            index = (v.type - (END + 1)) % COLOR.__len__()
+            c.itemconfig(widget, fill=COLOR[index][0])
+        elif (v.type <= WALL_BORDER):
+            index = abs(v.type - (WALL_BORDER - 1)) % COLOR.__len__()
+            c.itemconfig(widget, fill=COLOR[index][1])
+        elif (v.type == ROAD):
+            c.itemconfig(widget, fill='green')
+        elif (v.type == INSIDE_POLYGON):
+            c.itemconfig(widget, fill='azure')
 
 # Check if vertice c lies on line ab
 def isInsideLine(a, b, c):
@@ -214,7 +284,7 @@ def createWalls(graph, listPolygons, mRow, mCol):
     result = []
     visited = [False for i in range(graph.__len__())]
     path = [False for i in range(graph.__len__())]
-    count = 0
+    count = 1
 
     for polygon in listPolygons:
         listEgde = []
@@ -237,7 +307,7 @@ def createWalls(graph, listPolygons, mRow, mCol):
                 u = q.get()
                 for x, y in graph[u].listAdjacency:
                     point = y * mCol + x
-                    if not visited[point] and not checker(listEgde, point) and (graph[point].type == EMPTYPOINT or graph[point].type == END + count + 1):
+                    if not visited[point] and not checker(listEgde, point) and (graph[point].type == EMPTYPOINT or graph[point].type == END + count):
                         visited[point] = True
                         q.put(point)
                         path[point] = u
@@ -256,7 +326,7 @@ def createWalls(graph, listPolygons, mRow, mCol):
     return result
 
 # Breath first search algorithm to find the shotest path
-def BFS(s, f, graph, col, row):
+def BFS(s, f, graph, col, row, c):
     visited = [False for i in range(graph.__len__())]
     path = [-1 for i in range(graph.__len__())]
     for i in range(graph.__len__()):
@@ -267,12 +337,24 @@ def BFS(s, f, graph, col, row):
     q.put(s.callPoint(col))
     while not q.empty():
         u = q.get()
+       
+        # cứ mỗi lần lấy đỉnh kề ra, chúng ta sẽ cho các đa giác di chuyển và vẽ lại bản đồ
         for x, y in graph[u].listAdjacency:
             point = y * col + x
-            if not visited[point] and graph[point].type <= END and graph[point].type >= EMPTYPOINT:
-                visited[point] = True
-                q.put(point)
-                path[point] = u
+            if graph[point].type <= END and graph[point].type >= EMPTYPOINT:
+                if not visited[point]:
+                    if graph[point].type == EMPTYPOINT:
+                        c.itemconfig(graph[point].widget, fill='pale green')
+                        c.update()
+                        time.sleep(SEARCH_DELAY_TIME)
+                    visited[point] = True
+                    q.put(point)
+                    path[point] = u
+                    if graph[point].type == EMPTYPOINT:
+                        c.itemconfig(graph[point].widget, fill='')
+                        c.update()
+                    if graph[point] == f:
+                        break
     resultArr = []
     resultArr = findPath(s.callPoint(col), f.callPoint(col), path, resultArr)
     return resultArr
@@ -286,32 +368,40 @@ def findPath(s, f, path, mlist):
         if path[f] == -1:
             return mlist
         else:
-            mlist.append(path[f])
+            if path[f] not in mlist:  mlist.append(path[f])
             return findPath(s, path[f], path, mlist)
 
 # Dijktra algorithm
-def dijktra(s, f, graph, mCol, mRow):
+def dijktra(s, f, graph, mCol, mRow, c):
     dist = [INF for i in range(graph.__len__() + 5)]
     path = [-1 for i in range(graph.__len__() + 5)]
     
     dist[s.callPoint(mCol)] = 0
     pq = queue.PriorityQueue()
-    pq.put(s)
-    s.dist = 0
+    start = vertices(s.x, s.y, 0)
+    start.dist = 0
+    pq.put(start)
     while not pq.empty():
         vertex = pq.get()
         u = vertex.callPoint(mCol)
         w = vertex.dist
-        for x, y in (graph[u].listAdjacency):
+        for x, y in graph[u].listAdjacency:
             point = y * mCol + x
-            if w + graph[point].dist < dist[point] and graph[point].type <= END and graph[point].type >= EMPTYPOINT:
-                dist[point] = w + graph[point].dist
-                v = vertices(x, y, 0)
-                v.dist = dist[point]
-                pq.put(v)
-                path[point] = u
+            if graph[point].type <= END and graph[point].type >= EMPTYPOINT:
+                if w + graph[point].dist < dist[point]:
+                    if graph[point].type == EMPTYPOINT:
+                        c.itemconfig(graph[point].widget, fill='pale green')
+                        c.update()
+                        time.sleep(SEARCH_DELAY_TIME)
+                    dist[point] = w + graph[point].dist
+                    v = vertices(x, y, 0)
+                    v.dist = dist[point]
+                    pq.put(v)
+                    path[point] = u
+                    if graph[point].type == EMPTYPOINT:
+                        c.itemconfig(graph[point].widget, fill='')
+                        c.update()
     resultArr = []
-    print(dist[f.callPoint(mCol)])
     resultArr = findPath(s.callPoint(mCol), f.callPoint(mCol), path, resultArr)
     return resultArr
 
@@ -325,7 +415,7 @@ class Node:
         return self.Position == other.Position
 
 #Tim kiem heuristic (A sao)
-def AStart(data,start,end,mrow,mcol):
+def AStart(data,start,end,mrow,mcol, c):
     #Tạo openlist và closelist
     # openlist là phần tử cần duyệt lại
     # closelist là phần tử ko cần duyệt
@@ -352,19 +442,22 @@ def AStart(data,start,end,mrow,mcol):
             if item.f < curent_node.f:
                 curent_node = item
                 current_index=  index
+        mPoint = curent_node.Position.y * mcol + curent_node.Position.x
+        if data[mPoint].type == EMPTYPOINT:
+            c.itemconfig(data[mPoint].widget, fill='pale green')
+            c.update()
+            time.sleep(SEARCH_DELAY_TIME)
         # Lấy current_node ra thêm vào close_list 
         # bắt đầu tìm kiếm node con của current
         open_list.pop(current_index)
         close_list.append(curent_node)
-       
+
         if curent_node == end_node:
             result = []
             while curent_node is not None: 
                 result.append(vertices(curent_node.Position.x,curent_node.Position.y,ROAD).callPoint(mcol))
                 check = curent_node
-                curent_node = curent_node.parent
-               
-            result = result[::-1]
+                curent_node = curent_node.parent         
             return result[1:-1]
         #Tìm các node xung quanh current node 
         children = []
@@ -395,7 +488,7 @@ def AStart(data,start,end,mrow,mcol):
             if check==2:
                 child.g = curent_node.g +1
                # child.h = ((child.Position.GetX() - end_node.Position.GetX()) * 2) + ((child.Position.GetY() - end_node.Position.GetY()) * 2)
-                child.h = abs(child.Position.x - end_node.Position.x) + abs(child.Position.y - end_node.Position.y) 
+                child.h = math.sqrt((child.Position.x - end_node.Position.x)**2 + abs(child.Position.y - end_node.Position.y)**2 ) 
                 child.f = child.g + child.h
             # Kiểm tra đã tồn tại trong openlist chưa
                 for open in open_list:
@@ -404,6 +497,9 @@ def AStart(data,start,end,mrow,mcol):
                         break  
                 if check ==2:              
                     open_list.append(child)
+        if data[mPoint].type == EMPTYPOINT:
+            c.itemconfig(data[mPoint].widget, fill='')
+            c.update()
     return (None)
 # A* algorithm --- end
 
@@ -419,127 +515,192 @@ def getMinDistance(listCatchPoint, point, visited, mCol, mRow):
     return index
 
 # Create a road to from start point to the goal
-def createRoad(choose, graph, listCatchPoint, startPoint, endPoint, mCol, mRow):
+def createRoad(choose, graph, listCatchPoint, startPoint, endPoint, mCol, mRow, c, listEdge, listPolygon):
     i = 0
-    roadArr = []
     countDis = 0
     if listCatchPoint.__len__() == 0:
-        if choose == 1:
-            roadArr.append(BFS(startPoint, endPoint, graph, mCol, mRow))
-        if choose == 2:
-            roadArr.append(AStart(graph, startPoint, endPoint, mRow, mCol))
-        if choose == 3:
-            roadArr.append(dijktra(startPoint, endPoint, graph, mCol, mRow))
+        countDis += FindPathWhilePlygonMove(startPoint, endPoint, graph, listPolygon, mCol, mRow, c, listEdge, choose)
     else:
         visited = [False for q in range(listCatchPoint.__len__() + 1)]
         start = startPoint
         
         while i <= listCatchPoint.__len__():
-            temp = []
             index = getMinDistance(listCatchPoint, start, visited, mCol, mRow)
             end = endPoint
             if i < listCatchPoint.__len__() or index != -1:
                 end = listCatchPoint[index]
-            if choose == 1:
-                temp = BFS(start, end, graph, mCol, mRow)
-            if choose == 2:
-                temp = AStart(graph, start, end, mRow, mCol)
+            countDis += FindPathWhilePlygonMove(startPoint, endPoint, graph, listPolygon, mCol, mRow, c, listEdge, choose)
             i += 1
             visited[index] = True
             start = end
-            roadArr.append(temp)
-    for temp in roadArr:
-        for j in temp:
-            graph[j].type = ROAD
-            countDis += 1
     return countDis
 
-# Draw map by tkinter
-def draw_board(canvas, graph, row, col):
-    for i in range(-1, row):
-        if i < row:
-            canvas.create_text((i + 1) * DISTANCE + DISTANCE * 1.5, DISTANCE / 2, text=i + 1)
-        for j in range(-1, col):
-            canvas.create_text(DISTANCE / 2, (j+1) * DISTANCE + DISTANCE * 1.5, text=j + 1)
+# Get random valid directtion   
+def checkDirection(graph, polygon, mCol, mRow):
+    direction = [
+        [1, 0], [-1, 0], # right, left
+        [0, 1], [0, -1], # up, down
+    ]
+    mDirection = [0, 0]
+    xMax, yMax, xMin, yMin = getMax(polygon, mCol, mRow)
+    # random direction
+    random.shuffle(direction)
+    for dir in direction:
+        # to right
+        if dir == [1, 0] and xMax + dir[0] < mCol:
+            cusor = yMin
+            while cusor <= yMax:
+                point = cusor * mCol + (xMax + dir[0])
+                if graph[point].type != EMPTYPOINT:
+                    break
+                cusor+=1
+            if cusor == yMax + 1:
+                return dir
+        # to left
+        elif dir == [-1, 0] and xMin + dir[0] > 0:
+            cusor = yMin
+            while cusor <= yMax:
+                point = cusor * mCol + (xMin + dir[0])
+                if graph[point].type != EMPTYPOINT:
+                    break
+                cusor += 1
+            if cusor == yMax + 1:
+                return dir
+        # to up
+        elif dir == [0, 1] and yMax + dir[0] < mRow:
+            cusor = xMin
+            while cusor <= xMax:
+                point = (yMax + dir[1]) * mCol + cusor
+                if graph[point].type != EMPTYPOINT:
+                    break
+                cusor += 1
+            if cusor == xMax + 1:
+                return dir
+        # to down
+        elif dir == [0, -1] and yMin + dir[0] > 0:
+            cusor = xMin
+            while cusor <= xMax:
+                point = (yMin + dir[1]) * mCol + cusor
+                if graph[point].type != EMPTYPOINT:
+                    break
+                cusor += 1
+            if cusor == xMax + 1:
+                return dir
+    return mDirection
 
-    for v in graph:
-        coords = ((v.x + 1) * DISTANCE, (v.y+1) * DISTANCE, (v.x + 1) * DISTANCE + DISTANCE, (v.y+1) * DISTANCE + DISTANCE)
-        if (v.type == START):
-            canvas.create_rectangle(coords, width=1, state='disabled', fill='red')
-        elif (v.type == END):
-            canvas.create_rectangle(coords, width=1, state='disabled', fill='blue')
-        elif (v.type == CATCH):
-            canvas.create_rectangle(coords, width=1, state='disabled', fill='SteelBlue3')    
-        elif (v.type == BORDER):
-            canvas.create_rectangle(coords, width=1, state='disabled', fill='gray')
-        elif (v.type >= END + 1):
-            index = (v.type - (END + 1)) % COLOR.__len__()
-            canvas.create_rectangle(coords, width=1, state='disabled', fill=COLOR[index][0])
-        elif (v.type <= WALL_BORDER):
-            index = abs(v.type - WALL_BORDER) % COLOR.__len__()
-            canvas.create_rectangle(coords, width=1, state='disabled', fill=COLOR[index][1])
-        elif (v.type == ROAD):
-            canvas.create_rectangle(coords, width=1, state='disable', fill='green')
-        elif (v.type == EMPTYPOINT):
-            canvas.create_rectangle(coords, width=1, state='disabled')
+# Moving all polygon
+def movingPolygon(graph, listPolygon, mCol, mRow, c, listEdge):
+    counter = 1
+    # Delete inside polygon
+    listCheckInside = list(filter(lambda x: x.type == INSIDE_POLYGON, graph))
+    for temp in listCheckInside:
+        graph[temp.callPoint(mCol)].type = EMPTYPOINT
+        c.itemconfig(graph[temp.callPoint(mCol)].widget, fill='')
+    # Each polygon
+    for polygon in listPolygon:
+        whichPolygon = END + counter
+        # Get random available direction
+        direction = checkDirection(graph, polygon, mCol, mRow)
 
+        if direction != [0, 0]:
+            
+            listVertices = list(filter(lambda x: x.type == whichPolygon or x.type == -whichPolygon, graph))
+            if direction[0] != 0:
+                reverse = direction[0] > 0
+                listVertices.sort(key=lambda v: v.x, reverse=reverse)
+            elif direction[1] != 0:
+                reverse = direction[1] > 0
+                listVertices.sort(key=lambda v: v.y, reverse=reverse)
+            # Move all point of the polygon to the direction
+            check = False
+            for vertex in listVertices:
+                point = (vertex.y + direction[1]) * mCol + vertex.x + direction[0]
+                if graph[point].type != EMPTYPOINT and abs(graph[point].type) != whichPolygon:
+                    check = True
+            if not check:
+                for vertex in listVertices:
+                    point = (vertex.y + direction[1]) * mCol + vertex.x + direction[0]
+                    if vertex.type != graph[point].type:
+                        graph[point].type = vertex.type
+                        c.itemconfig(vertex.widget, fill='')
+                        graph[vertex.callPoint(mCol)].type = EMPTYPOINT
+                for v in polygon:
+                    v.x += direction[0]
+                    v.y += direction[1]
+                listPolygon[counter - 1] = polygon
+                newlistEdge = []
+                for edges in listEdge[counter - 1]:
+                    temp = []
+                    for edge in edges:
+                        temp.append(edge + direction[1] * mCol + direction[0])
+                    newlistEdge.append(temp)
+                listEdge[counter - 1] = newlistEdge
+                # Get new list poin inside polygon
+                isInsidePolygon(listEdge[counter - 1], graph, polygon, mCol, mRow)
+        counter += 1
+
+def FindPathWhilePlygonMove(s, f, graph, listPolygon, mCol, mRow, c, listEdge, choose):
+    start = s
+    count = 0
+    while True:
+        time.sleep(TIME_PER_UNIT)
+        resultArr = []
+        if choose == 2:
+            resultArr = AStart(graph, start, f, mRow, mCol, c)
+        elif choose == 3:
+            resultArr = dijktra(start, f, graph, mCol, mRow, c)
+        else:
+            resultArr = BFS(start, f, graph, mCol, mRow, c)
+        if (resultArr.__len__() != 0):
+            temp = resultArr[resultArr.__len__() - 1]
+            graph[temp].type = ROAD
+            start = graph[temp]
+            count += 1
+        if resultArr.__len__() == 0:
+            for x, y in graph[f.callPoint(mCol)].listAdjacency:
+                point = y * mCol + x
+                if graph[point].type == ROAD:
+                    return count
+        movingPolygon(graph, listPolygon, mCol, mRow, c, listEdge)
+        draw_board(c, graph, mCol, mRow)
+        c.update()
 # main
 def main():
-    #
     parser = argparse.ArgumentParser()
 
-    #-db DATABSE -u USERNAME -p PASSWORD -size 20
-    parser.add_argument("-name","--file",help="read file ")
+    # #-db DATABSE -u USERNAME -p PASSWORD -size 20
+    parser.add_argument("-filename", "--file", help="read file ")
     args = parser.parse_args()
     if path.exists(args.file):
         print("[1]: Breath First Search")
         print("[2]: A Start")
         print("[3]: Dijktra")
         choose = input("Choose Algorithm: ")
-        # Read data from the input file  
+        # Read data from the input file
         startPoint, endPoint, listCatchPoint, listPolygons, mRow, mCol = ReadFile(args.file)
-
-        # Initialize graph
-        graph = initGraph(mRow, mCol, listPolygons, startPoint, endPoint, listCatchPoint)
-
-        # Create Wall
-        createWalls(graph, listPolygons, mRow, mCol)
         
-        #find path from start to end
-        countDis = createRoad(int(choose), graph, listCatchPoint, startPoint, endPoint, mCol, mRow)
-    
         # From this line, Those codes below will create an interface for user.
         # Create root view which is containing all views
         root = Tk()
-        # Create frame which is containing canvas
-        width = mCol * DISTANCE + 100
-        height = mRow * DISTANCE + 100
-        if width > root.winfo_screenwidth() - 60:
-            width = root.winfo_screenwidth()- 60
-        if height > root.winfo_screenheight()- 60:
-            height = root.winfo_screenheight()- 60
+        # Create widgets:
+        c = createWidgets(root, mCol, mRow)
         
-        frame =Frame(root, width=width, height=height)
-        frame.grid(row=0,column=0)
-        # Create canvas containing cell
-        c = Canvas(frame, width=width, height=height, bg="white")
-        # Create horizontal scroll bar
-        hbar=Scrollbar(frame,orient=HORIZONTAL)
-        hbar.pack(side=BOTTOM,fill=X)
-        hbar.config(command=c.xview)
-        # Create vertical scroll bar
-        vbar=Scrollbar(frame,orient=VERTICAL)
-        vbar.pack(side=RIGHT,fill=Y)
-        vbar.config(command=c.yview)
-        # Draw map here
+        # Initialize graph
+        graph = initGraph(mRow, mCol, listPolygons, startPoint, endPoint, listCatchPoint)
+
+        # Initialize interface
+        initInterface(graph, c, mCol, mRow)
+
+        # Create basic map and  Wall
+        listEdge = createWalls(graph, listPolygons, mRow, mCol)
         draw_board(c, graph, mCol, mRow)
+        c.update()
 
-        # Caculate distance of the path
-        a = "Distance of path: " + str(countDis)
-        c.create_text(DISTANCE, (mRow+1) * DISTANCE + DISTANCE * 1.5, text=a)
+        # #find path from start to end
+        number = createRoad(int(choose), graph, listCatchPoint, startPoint, endPoint, mCol, mRow, c, listEdge, listPolygons)
+        mString = 'Distance Of The Path: ' + str(number)
 
-        c.config(scrollregion=c.bbox("all"), xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-        c.pack(padx=10, pady=10)
+        c.create_text(DISTANCE, (mRow+1) * DISTANCE + DISTANCE * 1.5, text=mString)
 
         root.update()
     else:
