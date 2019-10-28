@@ -7,6 +7,7 @@ import os.path
 from os import path
 import time
 import random
+from tkinter import messagebox
 
 # Declare constant variables
 INF = int(1e9)
@@ -142,10 +143,13 @@ def initGraph(mRow, mCol, listPolygons, startPoint, endPoint, listCatchPoint):
 def createWidgets(root, mCol, mRow):
     width = mCol * DISTANCE + 200
     height = mRow * DISTANCE + 200
-    if width > root.winfo_screenwidth():
-        width = root.winfo_screenwidth()
-    if height > root.winfo_screenheight():
-        height = root.winfo_screenheight()
+    if width > root.winfo_screenwidth() + 80:
+        width = root.winfo_screenwidth() + 80
+    if height > root.winfo_screenheight() + 80:
+        height = root.winfo_screenheight() + 80
+    
+    root.title('1612083_1612033_1612019')
+
     
     frame =Frame(root, relief=SUNKEN)
     frame.grid_rowconfigure(0, weight=1)
@@ -161,7 +165,7 @@ def createWidgets(root, mCol, mRow):
     
     # Draw map here
     # draw_board(c, graph, mCol, mRow)
-    c = Canvas(frame, width=width, height=height, bg="white", scrollregion=(0, 0, mCol * DISTANCE + 100, mRow * DISTANCE + 100), xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+    c = Canvas(frame, width=width, height=height, bg="white", scrollregion=(0, 0, mCol * DISTANCE + 150, mRow * DISTANCE + 150), xscrollcommand=hbar.set, yscrollcommand=vbar.set)
     c.grid(row=0, column=0, sticky=N+S+E+W)
 
     hbar.config(command=c.xview)
@@ -197,7 +201,7 @@ def draw_board(c, graph, mCol, mRow):
         elif v.type == END:
             c.itemconfig(widget, fill='blue')
         elif v.type == CATCH:
-            c.itemconfig(widget, fill='SteelBlue3')    
+            c.itemconfig(widget, fill='red4')    
         elif (v.type >= END + 1):
             index = (v.type - (END + 1)) % COLOR.__len__()
             c.itemconfig(widget, fill=COLOR[index][0])
@@ -205,9 +209,9 @@ def draw_board(c, graph, mCol, mRow):
             index = abs(v.type - (WALL_BORDER - 1)) % COLOR.__len__()
             c.itemconfig(widget, fill=COLOR[index][1])
         elif (v.type == ROAD):
-            c.itemconfig(widget, fill='green')
+            c.itemconfig(widget, fill='medium orchid')
         elif (v.type == INSIDE_POLYGON):
-            c.itemconfig(widget, fill='azure')
+            c.itemconfig(widget, fill='gray90')
 
 # Check if vertice c lies on line ab
 def isInsideLine(a, b, c):
@@ -253,11 +257,11 @@ def isInsidePolygon(listEdge, graph, polygon, mCol, mRow):
     if (polygon.__len__() < 3):
         return
     xMax, yMax, xMin, yMin = getMax(polygon, mCol, mRow)
-    
+    listInvalid = []
     for vertice in graph:
         lastest = vertices(mCol, vertice.y, 0)
         count = 0
-        if vertice.x < xMax and vertice.x > xMin and vertice.y < yMax and vertice.y > yMin and vertice.type == EMPTYPOINT:
+        if vertice.x < xMax and vertice.x > xMin and vertice.y < yMax and vertice.y > yMin and vertice.type >= EMPTYPOINT and vertice.type <= END:
             j = 0
             while j < polygon.__len__():
                 if vertice != polygon[j] and orientation(vertice, lastest, polygon[j]) == 0 and isInsideLine(vertice, lastest, polygon[j]):
@@ -277,8 +281,12 @@ def isInsidePolygon(listEdge, graph, polygon, mCol, mRow):
                         break
                 i += 1
         if count % 2 == 1:
-            vertice.type = INSIDE_POLYGON
-
+            if vertice.type == EMPTYPOINT:
+                vertice.type = INSIDE_POLYGON
+            else:
+                listInvalid.append(vertice)
+    return listInvalid
+            
 # Check if the point 
 def checker(listEgde, point):
     for i in listEgde:
@@ -292,7 +300,7 @@ def createWalls(graph, listPolygons, mRow, mCol):
     visited = [False for i in range(graph.__len__())]
     path = [False for i in range(graph.__len__())]
     count = 1
-
+    listInvalid = []
     for polygon in listPolygons:
         listEgde = []
         i = 0
@@ -327,10 +335,10 @@ def createWalls(graph, listPolygons, mRow, mCol):
         for temp in listEgde:
             for j in temp:
                 graph[j].type = WALL_BORDER - count
-        isInsidePolygon(listEgde, graph, polygon, mCol, mRow)
+        listInvalid += isInsidePolygon(listEgde, graph, polygon, mCol, mRow)
         result.append(listEgde)
         count += 1
-    return result
+    return (result, listInvalid)
 
 # Breath first search algorithm to find the shotest path
 def BFS(s, f, graph, col, row, c):
@@ -507,7 +515,7 @@ def AStart(data,start,end,mrow,mcol, c):
         if data[mPoint].type == EMPTYPOINT:
             c.itemconfig(data[mPoint].widget, fill='')
             c.update()
-    return (None)
+    return []
 # A* algorithm --- end
 
 # Get the min distance from point to the point of the listCatchPoint
@@ -522,21 +530,24 @@ def getMinDistance(listCatchPoint, point, visited, mCol, mRow):
     return index
 
 # Create a road to from start point to the goal
-def createRoad(choose, graph, listCatchPoint, startPoint, endPoint, mCol, mRow, c, listEdge, listPolygon):
+def createRoad(choose, graph, listCatchPoint, startPoint, endPoint, mCol, mRow, c, listEdge, listPolygon, checkMovable, listInvalid):
     i = 0
     countDis = 0
     if listCatchPoint.__len__() == 0:
-        countDis += FindPathWhilePlygonMove(startPoint, endPoint, graph, listPolygon, mCol, mRow, c, listEdge, choose)
+        countDis += FindPathWhilePlygonMove(startPoint, endPoint, graph, listPolygon, mCol, mRow, c, listEdge, choose, checkMovable)
+        if countDis == -1:
+            return countDis
     else:
         visited = [False for q in range(listCatchPoint.__len__() + 1)]
         start = startPoint
-        
         while i <= listCatchPoint.__len__() + 1:
             index = getMinDistance(listCatchPoint, start, visited, mCol, mRow)
             end = endPoint
             if i < listCatchPoint.__len__() or index != -1:
                 end = listCatchPoint[index]
-            countDis += FindPathWhilePlygonMove(start, end, graph, listPolygon, mCol, mRow, c, listEdge, choose)
+            countDis += FindPathWhilePlygonMove(start, end, graph, listPolygon, mCol, mRow, c, listEdge, choose, checkMovable)
+            if countDis == -1:
+                return countDis
             i += 1
             visited[index] = True
             start = end
@@ -643,10 +654,11 @@ def movingPolygon(graph, listPolygon, mCol, mRow, c, listEdge):
                     newlistEdge.append(temp)
                 listEdge[counter - 1] = newlistEdge
                 # Get new list poin inside polygon
-                isInsidePolygon(listEdge[counter - 1], graph, polygon, mCol, mRow)
+        isInsidePolygon(listEdge[counter - 1], graph, polygon, mCol, mRow)
         counter += 1
 
-def FindPathWhilePlygonMove(s, f, graph, listPolygon, mCol, mRow, c, listEdge, choose):
+# Fiding path while the polygons are moving
+def FindPathWhilePlygonMove(s, f, graph, listPolygon, mCol, mRow, c, listEdge, choose, checkMovable):
     start = s
     count = 0
     while True:
@@ -659,18 +671,30 @@ def FindPathWhilePlygonMove(s, f, graph, listPolygon, mCol, mRow, c, listEdge, c
         else:
             resultArr = BFS(start, f, graph, mCol, mRow, c)
         if (resultArr.__len__() != 0):
+            if checkMovable != 'y':
+                for a in resultArr:
+                    graph[a].type = ROAD
+                draw_board(c, graph, mCol, mRow)
+                c.update()
+                return resultArr.__len__()
             temp = resultArr[resultArr.__len__() - 1]
             graph[temp].type = ROAD
             start = graph[temp]
             count += 1
         if resultArr.__len__() == 0:
+            if checkMovable != 'y':
+                return -1
             for x, y in graph[f.callPoint(mCol)].listAdjacency:
                 point = y * mCol + x
                 if graph[point].type == ROAD:
                     return count
-        movingPolygon(graph, listPolygon, mCol, mRow, c, listEdge)
+        if checkMovable == 'y':
+            movingPolygon(graph, listPolygon, mCol, mRow, c, listEdge)
         draw_board(c, graph, mCol, mRow)
         c.update()
+        if checkMovable != 'y':
+            break
+
 # main
 def main():
     parser = argparse.ArgumentParser()
@@ -683,9 +707,11 @@ def main():
         print("[2]: A Start")
         print("[3]: Dijktra")
         choose = input("Choose Algorithm: ")
+        checkMovable = input("Movable Polygons(y/n):")
         # Read data from the input file
         startPoint, endPoint, listCatchPoint, listPolygons, mRow, mCol = ReadFile(args.file)
         
+
         # From this line, Those codes below will create an interface for user.
         # Create root view which is containing all views
         root = Tk()
@@ -699,16 +725,32 @@ def main():
         initInterface(graph, c, mCol, mRow)
 
         # Create basic map and  Wall
-        listEdge = createWalls(graph, listPolygons, mRow, mCol)
+        listEdge, listInvalid = createWalls(graph, listPolygons, mRow, mCol)
         draw_board(c, graph, mCol, mRow)
         c.update()
+        check = True
+        # Check if start or end inside polygon
+        if startPoint in listInvalid or endPoint in listInvalid:
+            check = False
+        for v in listCatchPoint:
+            if v in listInvalid:
+                listCatchPoint.remove(v)
+        
+        if check:
+            # #find path from start to end
+            if not choose.isdigit():
+                choose = 2
+            number = createRoad(int(choose), graph, listCatchPoint, startPoint, endPoint, mCol, mRow, c, listEdge, listPolygons, checkMovable, listInvalid)
+            mString = 'Distance Of The Path: ' + str(number)
 
-        # #find path from start to end
-        number = createRoad(int(choose), graph, listCatchPoint, startPoint, endPoint, mCol, mRow, c, listEdge, listPolygons)
-        mString = 'Distance Of The Path: ' + str(number)
-
-        c.create_text(DISTANCE, (mRow+1) * DISTANCE + DISTANCE * 1.5, text=mString)
-
+            if number == -1:
+                mString = 'There is no path to the end '
+                messagebox.showinfo("Result", mString)
+            
+            c.create_text(DISTANCE * 2, (mRow + 1) * DISTANCE + DISTANCE * 2, text=mString)
+            root.update()
+        else:
+            messagebox.showinfo("Result", 'There is no path to the end ')
         root.update()
     else:
         print(' File Not Existed')
